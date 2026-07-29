@@ -87,8 +87,34 @@ robotics is about systems you *can't* just command — dynamics you must **explo
 rather than cancel**: balance, legged locomotion, dynamic/acrobatic manipulation,
 and the optimal-control machinery (LQR, dynamic programming, trajectory
 optimization / direct collocation, RL) that learned policies for those systems sit
-on. On the north-star path once the statically-stable wheeled base is solid. See
-[`notes/underactuated/00_overview.md`](notes/underactuated/00_overview.md).
+on. On the north-star path once the statically-stable wheeled base is solid.
+
+- [`00_overview.md`](notes/underactuated/00_overview.md) — real 20-chapter ToC,
+  chapter tiering (legged chapters weighted Tier 1), reading order, tooling.
+- [`00b_sota_augmentation.md`](notes/underactuated/00b_sota_augmentation.md) — the
+  learned/modern material the 2024 text leaves as stubs (deep RL, sim-to-real,
+  visuomotor policies, modern locomotion), and which chapters need nothing.
+
+**Progress**
+
+| # | Topic | Notes | Status |
+|---|---|---|---|
+| 1 | Fully-actuated vs underactuated | [`01_underactuation.md`](notes/underactuated/01_underactuation.md) | ✅ theory + Ex 1.3 |
+| 2 | The simple pendulum | [`02_simple_pendulum.md`](notes/underactuated/02_simple_pendulum.md) | ✅ theory + discussion |
+| 3a | Model systems + linearization | [`03a_model_systems_linearization.md`](notes/underactuated/03a_model_systems_linearization.md) | ✅ theory + discussion |
+| 3b | Controllability + LQR | [`03b_controllability_lqr.md`](notes/underactuated/03b_controllability_lqr.md) | ✅ theory |
+| 3c | Partial feedback linearization + swing-up | [`03c_pfl_swingup.md`](notes/underactuated/03c_pfl_swingup.md) | ✅ theory |
+| 4a | Limit cycles, Poincaré maps, rimless wheel | [`04a_limit_cycles_rimless_wheel.md`](notes/underactuated/04a_limit_cycles_rimless_wheel.md) | ✅ theory |
+| 4b | Compass gait, kneed walker, running (SLIP) | [`04b_compass_gait_slip.md`](notes/underactuated/04b_compass_gait_slip.md) | ✅ theory |
+| 5 | Highly-articulated legged (centroidal/ZMP) | — | ⬜ next |
+
+Ch 1 key result: underactuated ⟺ `rank[f₂] < dim[q]`, i.e. `B` not full row rank;
+fully-actuated systems are feedback equivalent to `q̈ = u′` (= computed torque,
+MR Ch 11). Ex 1.3 payoff: with a task-space force input **`B(q) = J(q)ᵀ`**, so
+actuation singularities *are* MR Ch 5 kinematic singularities.
+Ch 2 key result: `Ė = u θ̇`, so energy-shaping `u = −k θ̇ Ẽ` swings up a
+torque-limited pendulum onto the homoclinic orbit `E = mgl` — attractive but not
+stable, hence the handoff to a balancing controller in Ch 3.
 
 ## Chapter recaps (Modern Robotics)
 
