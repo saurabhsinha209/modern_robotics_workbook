@@ -106,7 +106,13 @@ on. On the north-star path once the statically-stable wheeled base is solid.
 | 3c | Partial feedback linearization + swing-up | [`03c_pfl_swingup.md`](notes/underactuated/03c_pfl_swingup.md) | ✅ theory |
 | 4a | Limit cycles, Poincaré maps, rimless wheel | [`04a_limit_cycles_rimless_wheel.md`](notes/underactuated/04a_limit_cycles_rimless_wheel.md) | ✅ theory |
 | 4b | Compass gait, kneed walker, running (SLIP) | [`04b_compass_gait_slip.md`](notes/underactuated/04b_compass_gait_slip.md) | ✅ theory |
-| 5 | Highly-articulated legged (centroidal/ZMP) | — | ⬜ next |
+| 7 | Dynamic programming, HJB, value iteration | [`07_dynamic_programming.md`](notes/underactuated/07_dynamic_programming.md) | ✅ theory |
+| 7b | Bridge to RL | [`07b_rl_bridge.md`](notes/underactuated/07b_rl_bridge.md) | ✅ theory |
+| 8 | LQR, Riccati, TVLQR | [`08_lqr.md`](notes/underactuated/08_lqr.md) | ✅ theory + FAQ |
+| 10a | Trajectory opt: transcription / shooting / collocation | [`10a_trajectory_optimization.md`](notes/underactuated/10a_trajectory_optimization.md) | ✅ theory + FAQ |
+| 10b | MPC, recursive feasibility, iLQR/DDP, MPPI | [`10b_mpc_ilqr_mppi.md`](notes/underactuated/10b_mpc_ilqr_mppi.md) | ✅ theory |
+| 16/17 | Limit-cycle stabilization; control through contact | — | ⬜ next |
+| 5 | Highly-articulated legged (centroidal/ZMP) | — | ⬜ after 16/17 |
 
 Ch 1 key result: underactuated ⟺ `rank[f₂] < dim[q]`, i.e. `B` not full row rank;
 fully-actuated systems are feedback equivalent to `q̈ = u′` (= computed torque,

@@ -319,4 +319,112 @@ Immediate options in the book:
 
 ## 9. FAQ
 
-*(To be filled in from discussion.)*
+### Q: If I increase the touchdown angle θ (from vertical), does the next apex get lower and faster? Isn't stance just an elastic collision — angle in = angle out?
+
+**Short answer: the elastic-collision picture is *half* right, and the direction is *backwards* from the naive guess. We settled it with the sim.**
+
+Two separate claims are hiding in the question:
+
+**(a) The `z ↔ ẋ` trade-off — always true.** At the apex `ż = 0`, so `E = ½ẋ² + gz`
+with `E` fixed. Higher apex ⟺ slower horizontal, *unconditionally*. So "z down
+**and** ẋ up" aren't two facts — they're the same fact. ✅ This part of the
+intuition is correct.
+
+**(b) The direction vs θ — the opposite of the naive "pogo" guess.** I first
+argued (wrongly) that a more-vertical leg gives a tall pogo bounce and a
+forward plant skims flat/fast. Sweeping θ at a fixed incoming apex (`z[n]=1.0`,
+book params `k̃=10.7, E=1.61`) shows the reverse:
+
+| θ (deg) | z[n+1] | ẋ[n+1] |
+|---|---|---|
+| 22.5 | 0.79 | 1.28 |
+| 30.0 (book) | 1.07 | 1.04 |
+| 37.5 | 1.57 | 0.27 |
+| 40.0 (peak) | 1.60 | 0.17 |
+| 45.0 | 0.95 | 1.15 |
+
+Over the main branch (θ ≈ 22°→40°), **more forward plant (larger θ) → HIGHER,
+SLOWER next apex** — then past ~40° the map **folds** back down (that fold is the
+non-monotonicity behind §3's two fixed points). Both ends run into "fall" (no
+clean hop). See `figures/04b_slip_theta_sweep.png` (generator alongside).
+
+![theta sweep](figures/04b_slip_theta_sweep.png)
+
+**The mechanism (why the pogo picture was wrong):** a running mass arrives moving
+mostly *horizontally*. What matters is how much of that horizontal velocity the
+leg **catches as radial spring compression** vs. lets slide past as tangential
+vaulting.
+- **θ large (leg tilted forward):** the leg axis is closer to the incoming
+  velocity → a big chunk goes **into compressing the spring** → big rebound
+  throws the mass **up** as it vaults over the foot; horizontal speed bled off →
+  **high, slow.**
+- **θ small (leg near vertical):** the horizontal velocity is nearly
+  *perpendicular* to the leg → barely compresses it → the mass **skims** over the
+  foot, keeping its speed → **low, fast.**
+
+A vertical leg under a *forward-moving* mass doesn't bounce — it skims. The pogo
+intuition only holds for a mass moving *vertically* (hopping in place).
+
+**Why it's *not* a specular ("angle in = angle out") reflection:** stance is not
+an instantaneous impulse off a fixed surface — it's an **extended, finite-time**
+inverted-pendulum-on-a-spring, and **gravity does work throughout the vault**, so
+touchdown and takeoff are not simply mirror images. The decisive tell: a
+reflection is monotone and *can't fold*. Our curve **folds** (and has two fixed
+points) → it is genuinely the full nonlinear stance dynamics, not a bounce.
+
+The one place your intuition *is* exactly right: **the steady periodic gait
+itself.** At the fixed point the stance trajectory is time-reversal symmetric
+about mid-stance, so leg-angle-in = leg-angle-out (mirrored about vertical) and
+speed-in = speed-out — a specular-like symmetry. But it's an *emergent property
+of that one orbit*, not something that holds as you vary θ.
+
+**Deadbeat takeaway:** on the usable branch, to *raise* the hop **increase** θ
+(plant more forward); to run *faster/flatter* **decrease** θ; stay left of the
+~40° fold or the map-inversion grabs the wrong branch.
+
+### Q: So walking control is two controllers — a continuous one, and a discrete LQR that takes over just before the collision?
+
+**Two *levels*, yes — but it's a cascade (two time-scales), not a temporal
+handoff, and the discrete one is *sampled* at the step boundary, it doesn't fire
+a torque burst near impact.**
+
+What's right: there are two levels, and the **collision is the clock** for the
+discrete one — each heel-strike is one tick that triggers one discrete update.
+
+Two corrections:
+
+1. **The discrete (Poincaré) LQR is sampled once per step, and outputs a
+   *setpoint*, not a torque.** At the section (put it at heel-strike) it reads the
+   state `x[n]` and emits **one decision** `u[n]` — a target for the *whole next
+   step*: desired swing-foot **touchdown angle**, target **orbital energy**, or a
+   **step-length/timing** target. It shapes the *coming* step; it does not
+   intervene in the final moments of the current one.
+
+2. **The two loops run concurrently at different rates — a cascade.** The
+   **inner** continuous loop (PFL energy-regulation + swing-foot placement, or
+   TVLQR around the orbit) produces `τ(t)` and runs the **entire step, never
+   stopping**. The **outer** discrete LQR is a **slower supervisor** that, once
+   per stride, nudges the inner loop's setpoint so the state at the *next* section
+   drifts toward the fixed point.
+
+```
+ heel-strike         heel-strike         heel-strike
+     ▼                   ▼                   ▼
+ [discrete LQR]      [discrete LQR]      [discrete LQR]   OUTER: once/step, sets setpoint
+ ══════════════════════════════════════════════════════
+   continuous hip torque τ(t) runs the WHOLE step        INNER: never stops
+```
+
+The linearized map `∂P/∂x` the discrete LQR uses **already folds in** the swing
+*and* the collision — so it "sees" the impact *through the map* and needn't act
+*at* it.
+
+**Why the "one controller at the collision" picture feels natural:** for **SLIP**
+it's literally true — stance is passive/uncontrolled, so the *only* control is the
+once-per-step touchdown-angle choice at the section (no inner loop → the discrete
+controller is the whole controller; the **deadbeat** case). The actuated compass
+gait adds the inner continuous loop *on top*, turning it into the two-level
+cascade. Crisp version: **one continuous controller runs every step; a discrete
+controller, clocked by the collision, retunes its target once per step** — it
+*supervises* the next step, not *takes over* the current one. See §1 (compass
+gait = Acrobot) and §3 (discrete-LQR / deadbeat on the return map).
