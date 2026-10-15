@@ -610,6 +610,72 @@ again quadratic — the recursion closes, which is why *one* sweep suffices. Sam
 mechanism as `08`'s Riccati equation; in fact **Riccati is this recursion with the
 feedforward term absent**, because there the nominal already is optimal.
 
+##### Where exactly does `k` come from? (`K` is Riccati — but `k`?)
+
+**`K` comes from the *curvature* of `Q`; `k` comes from its *gradient*.** Both fall
+out of one minimization. Expand `Q` to second order and set the `δu`-derivative to
+zero:
+
+```
+   Q(δx, δu) ≈ Q₀ + Q_xᵀδx + Q_uᵀδu + ½ [δx]ᵀ[Q_xx  Q_xu][δx]
+                                        [δu] [Q_ux  Q_uu][δu]
+
+   ∂Q/∂δu = Q_u + Q_uu δu + Q_ux δx = 0
+
+   ⇒  δu* = −Q_uu⁻¹( Q_u + Q_ux δx ) = −Q_uu⁻¹Q_u  +  (−Q_uu⁻¹Q_ux) δx
+                                        └─── k ───┘    └────── K ─────┘
+```
+
+**One equation, split by "does this term depend on `δx`?"** No → feedforward.
+Yes → feedback. `k` is the piece riding on `Q_u`, the *linear* term of the expansion.
+
+**Why `08` has no `k`.** LQR expands around `x=0, u=0` with cost `½xᵀQx + ½uᵀRu` —
+exactly quadratic, minimized *at* the origin, so the gradient there is zero:
+`Q_u = 0 ⇒ k = 0` automatically. The feedforward isn't missing from LQR, it's
+**zero**, because LQR's nominal is optimal by construction. iLQR's nominal is a guess,
+so `Q_u ≠ 0`.
+
+**What `Q_u` is.** In the backward pass,
+
+```
+   Q_u  =  ℓ_u   +   Bᵀ V_x′
+           └┬─┘      └──┬───┘
+   "input costs me    "the state I land in has cost-to-go gradient V_x′,
+    directly, now"     and B maps my input into that state"
+```
+
+so `Q_u` is the **total derivative of (cost from here to the end) w.r.t. `u[n]`** —
+which makes it *exactly* the adjoint gradient `∂J/∂u[n]` of `10a §9`, with `V_x′`
+playing the costate `λ[n+1]`. Same object from the other direction. Hence:
+
+```
+   gradient descent:  δu = −α · Q_u           raw gradient, tiny steps
+   iLQR feedforward:  k  = −Q_uu⁻¹ · Q_u      same gradient, Newton-scaled
+```
+
+**`k` is the Newton step** — inverse-curvature times gradient. That is the precise
+sense in which iLQR is Newton's method on a trajectory; `K` is the bonus that comes
+free because the local model happens to be an LQR problem.
+
+**Structurally: two recursions, not one.** In deviation coordinates the value function
+carries both a linear and a quadratic term:
+
+```
+   V(δx) = V₀ + V_xᵀ δx + ½ δxᵀ V_xx δx
+                └──┬──┘      └────┬────┘
+             feeds k next    feeds K next  ← this recursion IS Riccati
+```
+
+The backward pass sweeps **both** back together. `08` only needs the second because
+`V_x ≡ 0` when you already sit at the optimum.
+
+**On the figure.** Iteration 0, `ū ≡ 0`, pendulum hanging: `ℓ_u = 2Rū = 0` (no torque
+spent), but `V_x′ ≠ 0` (you're far from upright and the cost-to-go gradient points
+somewhere better). So `Q_u ≠ 0` purely through `BᵀV_x′` — *"torque here would reduce
+future cost"* — and `k` converts that into applied torque. That's the 0 → 1 jump in
+panel (a). At convergence `Q_u → 0` so `k → 0`, while `Q_uu, Q_ux` stay finite,
+leaving `K`.
+
 #### Step 3 — the forward pass, and why you must simulate
 
 > **The backward pass does not hand you a new trajectory. It hands you a

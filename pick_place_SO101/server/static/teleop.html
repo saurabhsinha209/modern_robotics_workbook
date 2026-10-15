@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>SO-101 teleop</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>SO-101 · phone teleop</h1>
+    <div class="sub">Streams the phone's 6-DoF pose to the arm. Clutch to move; release to reposition.</div>
+  </header>
+  <main>
+    <div class="panel"><span class="status"><span id="dot" class="dot"></span><span id="state">connecting…</span></span></div>
+    <div class="panel">
+      <button id="startBtn" class="btn" disabled>Start AR session</button>
+      <div class="muted" id="support" style="margin-top:10px">checking WebXR support…</div>
+      <div class="muted" style="margin-top:10px">Android Chrome works out of the box.</div>
+    </div>
+  </main>
+
+  <div id="overlay" style="display:none">
+    <div id="topbar">
+      <div id="statrow">
+        <span id="epchip" class="chip idle">IDLE</span>
+        <span id="ikchip" class="chip ok">IK ok</span>
+        <span id="counts" class="chip">✓0 ✗0</span>
+      </div>
+      <input id="instr" type="text" placeholder="task instruction (sent with START)" />
+      <div id="xrStats">–</div>
+    </div>
+
+    <div id="cams">
+      <div class="cam" id="cam-wrist"><img alt="" /><div class="ph">WRIST CAM<br><small>coming soon</small></div></div>
+      <div class="cam" id="cam-bench"><img alt="" /><div class="ph">BENCH CAM<br><small>coming soon</small></div></div>
+    </div>
+
+    <div id="bottom">
+      <div id="clutchrow">
+        <button id="clutchBtn" class="clutch off">CLUTCH&nbsp;OFF</button>
+        <button id="homeBtn" class="aux home">⌂<br>HOME</button>
+        <button id="orientBtn" class="aux orient">ORIENT<br>LOCK</button>
+      </div>
+
+      <div id="grip">
+        <div id="griphead"><span>GRIPPER</span><b id="gripval">50%</b></div>
+        <input id="gripslider" type="range" min="0" max="100" step="1" value="50" />
+        <div id="presets">
+          <button class="preset" data-v="0">CLOSED</button>
+          <button class="preset" data-v="25">¼</button>
+          <button class="preset" data-v="50">½</button>
+          <button class="preset" data-v="75">¾</button>
+          <button class="preset" data-v="100">OPEN</button>
+        </div>
+      </div>
+
+      <div id="eprow">
+        <button id="startEp" class="ep start">● START</button>
+        <button id="succBtn" class="ep succ">✓ SUCCESS</button>
+        <button id="failBtn" class="ep fail">✗ FAIL</button>
+      </div>
+      <div id="auxrow">
+        <button id="fwdBtn" class="aux">⟳ SET&nbsp;FWD</button>
+        <button id="discardBtn" class="aux discard">⌫ DISCARD</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/teleop.js"></script>
+</body>
+</html>

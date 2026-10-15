@@ -152,7 +152,9 @@ policies trained on *identical* clean data — **ACT** (~10%) vs a **Diffusion
 Policy** (~60%, the milestone above; sampling beats ACT's mode-averaging on the
 multimodal grasp). **Next:** a **DiT / flow-matching** run (Rung 4) for a
 three-way comparison, then **π0** (Rung 5), more teleop data to push past the
-overfitting wall, and **real hardware** (SO-100). CUDA parts
+overfitting wall, and **real hardware** (SO-101 — the physical-lab build order,
+actuator-ecosystem decision, and legged/wheeled-legged ladder are in
+[`proj_hardware_lab.md`](notes/proj_hardware_lab.md)). CUDA parts
 (training/π0/cuRobo/AnyGrasp) run on **cloud GPU**; the Mac does env, teleop, and
 eval. **MR book now complete; next course = Underactuated Robotics.**
 
