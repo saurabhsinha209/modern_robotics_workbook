@@ -46,7 +46,7 @@ class IKResult:
 
 class SO101Kinematics:
     def __init__(self, mjcf=config.MJCF, damping=0.04, max_iters=30,
-                 pos_tol=1e-3, rot_tol=1e-2, max_dq=0.3, rot_weight=0.4):
+                 pos_tol=1e-3, rot_tol=1e-2, max_dq=0.3, rot_weight=0.4, min_iters=1):
         self.model = mujoco.MjModel.from_xml_path(str(mjcf))
         self.data = mujoco.MjData(self.model)
         m = self.model
@@ -60,6 +60,7 @@ class SO101Kinematics:
         self.lift_jid = jid[1]
         self.damping, self.max_iters = damping, max_iters
         self.pos_tol, self.rot_tol, self.max_dq = pos_tol, rot_tol, max_dq
+        self.min_iters = min_iters          # >=1: always take a step, so sub-tolerance target motion isn't swallowed
         self.rot_weight = rot_weight
         self._jacp = np.zeros((3, m.nv))
         self._jacr = np.zeros((3, m.nv))
@@ -118,7 +119,7 @@ class SO101Kinematics:
             omega = w_hat * th                       # world-frame rotation error
             e_h, e_a = float(h @ omega), float(a @ omega)
             pos_err = float(np.linalg.norm(dp))
-            if pos_err < self.pos_tol and abs(e_h) < self.rot_tol and abs(e_a) < self.rot_tol:
+            if it >= self.min_iters and pos_err < self.pos_tol and abs(e_h) < self.rot_tol and abs(e_a) < self.rot_tol:
                 break
 
             mujoco.mj_jacSite(m, d, self._jacp, self._jacr, self.sid)
