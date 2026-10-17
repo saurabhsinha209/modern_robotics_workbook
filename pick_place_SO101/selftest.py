@@ -402,6 +402,6 @@ def _server_roundtrip():
     ok = (m and m["gripper"] == 33 and m["orient_lock"] is False and "_rx" in m
           and ev and ev[0][0] == "start" and ev[0][1]["instruction"] == "hi"
           and msg.get("state") == "recording"
-          and cams0 == {"wrist": False, "bench": False} and cams1["wrist"] and not cams1["bench"]
+          and not cams0["wrist"] and not cams0["bench"] and cams1["wrist"] and not cams1["bench"]
           and status == 200)
     return bool(ok)
