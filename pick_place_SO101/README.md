@@ -108,18 +108,22 @@ reaction time, ~0.3–1 s). Treat the label as "this episode ended in X", with
 the last steps carrying it — which is exactly the signal a termination/success
 head needs. Don't treat `terminal` as the exact success instant.
 
-## Camera hook (for the pipeline you're building)
+## Cameras
 
-```python
-server.push_frame("wrist", jpeg_bytes)    # or "bench"
+```bash
+.venv/bin/python -m pick_place_SO101.run_teleop --backend real --port ... --cameras
 ```
 
-served at `/cam/<name>.mjpg`; the phone shows a "coming soon" tile until a
-stream is live (`/cams`). To record frames with an episode, pass
-`frames={"wrist": jpeg, "bench": jpeg}` to `EpisodeLogger.step(...)` (they are
-written as numbered JPEGs). Wiring cameras into `run_loop` is the one missing
-piece and is intentionally left to your pipeline — grab at the loop rate
-(30 Hz), keep focus/exposure **locked**, timestamp against `t`.
+- **wrist** -> phone UI (visible after Start AR). **bench** -> `https://localhost:8443/bench.html`
+  on the Mac (`/cams.html` is the same page, bench only).
+- Captured via AVFoundation, selected by macOS **Unique ID** (`config.CAMERA_UIDS`),
+  not OpenCV index (the two openaicams share a name and indices move). A UVC Unique ID
+  encodes the USB **port**: swap the cables between ports and wrist/bench swap too.
+- Frames of both cameras are written with every recorded step
+  (`frames/<cam>/NNNNNN.jpg`, 1280x720 JPEG ~115 KB, ~7 MB/s). `--cam-size 640x480` to shrink.
+- Not done: exposure/focus lock (AVFoundation controls exist, not wired), per-frame capture
+  timestamps (frames are the latest at each 30 Hz tick, up to ~33 ms stale).
+- Tools: `tools/check_cameras.py` (OpenCV indices), `tools/view_cameras.py` (OpenCV preview).
 
 ## First bring-up on the real arm (do in this order)
 
@@ -149,3 +153,23 @@ piece and is intentionally left to your pipeline — grab at the loop rate
   (≈2° at the elbow measured). That is why `q` (measured) is logged alongside
   `q_cmd`.
 - 30 Hz loop; the serial bus read+write budget is ~5–8 ms, plenty of headroom.
+
+## Task planner and segmentation (`planner.py`, `segment.py`)
+
+- `planner.plan(jpeg, history)` asks a VLM for `{verb,target,destination,instruction}`.
+  Default backend is the HF Inference API: `export HF_TOKEN=hf_...`, optional
+  `PLANNER_MODEL` (default `Qwen/Qwen3-VL-30B-A3B-Instruct`). `MockBackend` and
+  `ManualBackend` work offline.
+- `segment.segment(jpeg, names)` returns boolean masks (`None` if not found) using
+  OWLv2 + SAM2 through `transformers` on MPS. Weights download on first use
+  (~1 GB total); `MockBackend` is colour-threshold only.
+- Offline tests: `.venv/bin/python -m pick_place_SO101.test_planner_segment`.
+
+## Live highlighted bench view
+
+`run_teleop --cameras --auto-tasks` also serves `https://<mac>:8443/bench.html` (`/cam/bench_hl.mjpg`): raw bench
+frames when idle, the planner's masks once a task is proposed, and during a recording Core ML EdgeTAM (Apple GPU,
+~13 Hz for two objects, `bench_overlay.py` + `coreml_live_tracker.py`) following the target and destination.
+Recorded frames stay raw. `--no-overlay` turns it off, `--track-backend pytorch` uses the slower MPS tracker.
+Weights live in `models/EdgeTAM-CoreML-Video/` (gitignored). Standalone demo: `python -m pick_place_SO101.tools.live_track
+--target "..." --dest "..."`. Rejected experiments (Apple Vision subject lift, hybrid box tracker, ACT→Core ML) are in `tools/coreml_eval/`.

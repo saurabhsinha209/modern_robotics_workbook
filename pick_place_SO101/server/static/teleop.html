@@ -25,15 +25,19 @@
       <div id="statrow">
         <span id="epchip" class="chip idle">IDLE</span>
         <span id="ikchip" class="chip ok">IK ok</span>
+        <span id="autochip" class="chip idle" style="display:none"></span>
         <span id="counts" class="chip">✓0 ✗0</span>
       </div>
       <input id="instr" type="text" placeholder="task instruction (sent with START)" />
+      <div id="taskrow">
+        <input id="tgt" type="text" placeholder="target (optional)" />
+        <input id="dst" type="text" placeholder="destination (optional)" />
+      </div>
       <div id="xrStats">–</div>
     </div>
 
     <div id="cams">
-      <div class="cam" id="cam-wrist"><img alt="" /><div class="ph">WRIST CAM<br><small>coming soon</small></div></div>
-      <div class="cam" id="cam-bench"><img alt="" /><div class="ph">BENCH CAM<br><small>coming soon</small></div></div>
+      <div class="cam" id="cam-wrist"><img alt="" /><div class="ph">WRIST CAM<br><small>no signal</small></div></div>
     </div>
 
     <div id="bottom">
@@ -62,6 +66,7 @@
       </div>
       <div id="auxrow">
         <button id="fwdBtn" class="aux">⟳ SET&nbsp;FWD</button>
+        <button id="nextBtn" class="aux" style="display:none">⏭ NEXT<br>TASK</button>
         <button id="discardBtn" class="aux discard">⌫ DISCARD</button>
       </div>
     </div>

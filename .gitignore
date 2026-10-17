@@ -9,3 +9,5 @@ pick_place/teleop/certs/
 pick_place/data/
 outputs/
 UnderactuatedRobotics.pdf
+pick_place_SO101/models/
+pick_place_SO101/data/

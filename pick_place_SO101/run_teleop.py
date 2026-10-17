@@ -14,6 +14,7 @@
     .venv/bin/python -m pick_place_SO101.run_teleop --selftest
 """
 import argparse
+import json
 import time
 
 import numpy as np
@@ -51,8 +52,13 @@ def run_validate(server):
         time.sleep(0.1)
 
 
+def parse_size(s):
+    w, h = (int(v) for v in s.lower().split("x"))
+    return (w, h)
+
+
 def run_loop(args, backend: Backend, server, twin: Backend | None = None,
-             should_stop=lambda: False, max_ticks=None):
+             should_stop=lambda: False, max_ticks=None, cams=None):
     """The control loop. Returns the pipeline (for tests)."""
     dt = 1.0 / args.hz
     pipe = TeleopPipeline(hz=args.hz, scale=args.scale, azimuth=args.azimuth,
@@ -61,13 +67,31 @@ def run_loop(args, backend: Backend, server, twin: Backend | None = None,
     log = None
     if not args.no_record:
         log = EpisodeLogger(args.data_dir, session=args.session, robot_id=args.robot_id,
-                            hz=args.hz, extra_meta={"backend": backend.name,
+                            hz=args.hz, frame_size=parse_size(args.frame_size),
+                            extra_meta={"backend": backend.name,
                                                     "scale": args.scale, "azimuth": args.azimuth,
                                                     "smooth_ms": args.smooth_ms,
                                                     "max_speed_dps": args.max_speed})
         print(f"[rec] session {log.dir}")
     instruction = args.task
+    base_task = json.loads(args.task_json) if args.task_json else {}
+    if base_task.get("instruction"):
+        instruction = base_task["instruction"]
     server.set_instruction(instruction)
+    auto = overlay = None
+    if getattr(args, "auto_tasks", False):
+        from . import planner, segment
+        from .session import AutoTasker
+        mock = args.auto_tasks == "mock"
+        auto = AutoTasker(lambda: cams.jpeg("bench")[0] if cams is not None else None,
+                          plan_backend=planner.MockBackend() if mock else None,
+                          seg_backend=segment.MockBackend() if mock else None)
+        auto.prepare()
+        if cams is not None and not getattr(args, "no_overlay", False):
+            from .bench_overlay import BenchOverlay
+            overlay = BenchOverlay(lambda: cams.jpeg("bench"), server.push_frame, auto.peek_masks,
+                                   backend=args.track_backend).start()
+        print(f"[auto] task planner on ({args.auto_tasks}); press NEXT TASK after rearranging")
 
     backend.connect()
     if twin is not None:
@@ -86,18 +110,39 @@ def run_loop(args, backend: Backend, server, twin: Backend | None = None,
                 break
             # ---- events from the phone UI ----
             for name, payload in server.take_events():
-                if name == "start" and log and not log.active:
-                    if payload.get("instruction"):
+                if name == "ready" and auto is not None:
+                    auto.prepare()
+                    print("[auto] planning next task…")
+                elif name == "start" and log and not log.active:
+                    prop = auto.take() if auto is not None else None
+                    if prop is not None:
+                        instruction = prop["task"]["instruction"]
+                        server.set_instruction(instruction)
+                    elif payload.get("instruction"):
                         instruction = payload["instruction"]
                         server.set_instruction(instruction)
-                    d = log.start(instruction)
+                    task = dict(base_task)
+                    if prop is not None:
+                        task.update(prop["task"])
+                    for k in ("target", "destination", "scene_id", "verb"):
+                        if payload.get(k):
+                            task[k] = payload[k]
+                    if overlay is not None:
+                        overlay.track(prop["masks"] if prop else None)
+                    d = log.start(instruction, task=task, masks=prop["masks"] if prop else None)
                     print(f"[rec] START ep {d.name}: {instruction!r}")
                 elif name in ("success", "fail") and log and log.active:
                     meta = log.end("success" if name == "success" else "failure")
+                    if overlay is not None:
+                        overlay.untrack()
+                    if auto is not None:
+                        print("[auto] rearrange the scene, then press NEXT TASK")
                     print(f"[rec] {meta['outcome'].upper()} ep {meta['episode']} "
                           f"{meta['n_steps']} steps {meta['duration_s']:.1f}s "
                           f"ik_fail={meta['ik_fail_steps']} held={meta['held_steps']}")
                 elif name == "discard":
+                    if overlay is not None:
+                        overlay.untrack()
                     if log and log.active:
                         log.discard()
                         print("[rec] DISCARD")
@@ -132,7 +177,11 @@ def run_loop(args, backend: Backend, server, twin: Backend | None = None,
                     twin.sync_viewer()
                 backend.sync_viewer()
                 if log and log.active:
-                    log.step(q_meas, q_cmd, info, msg)
+                    frames = None
+                    if cams is not None:
+                        frames = {n: j for n in cams.names
+                                  if (j := cams.jpeg(n)[0]) is not None}
+                    log.step(q_meas, q_cmd, info, msg, frames=frames)
 
                 now = time.monotonic()
                 if info.resynced:
@@ -153,6 +202,7 @@ def run_loop(args, backend: Backend, server, twin: Backend | None = None,
                         link_ms=(int(1000 * (now - msg["_rx"])) if msg else None),
                         tracked=(bool(msg.get("tracked", True)) if msg else False),
                         vio_jump=info.vio_jump, resynced=(now - last_resync < 1.0),
+                        **(auto.status() if auto is not None else {}),
                         n_success=(log.counts["success"] if log else 0),
                         n_fail=(log.counts["failure"] if log else 0))
             tick += 1
@@ -163,6 +213,8 @@ def run_loop(args, backend: Backend, server, twin: Backend | None = None,
             else:
                 nxt = time.perf_counter()              # overran; don't spiral
     finally:
+        if overlay is not None:
+            overlay.stop()
         if log and log.active:
             meta = log.end("aborted")
             print(f"[rec] aborted in-progress episode {meta['episode']} (kept, outcome=aborted)")
@@ -204,10 +256,24 @@ def parse_args(argv=None):
     ap.add_argument("--hz", type=float, default=config.CONTROL_HZ)
     ap.add_argument("--smooth-ms", type=float, default=config.SMOOTH_S * 1000,
                     help="phone jitter-buffer delay in ms (0 = off)")
+    ap.add_argument("--cameras", action="store_true",
+                    help="start wrist+bench USB cameras (config.CAMERA_UIDS); wrist -> phone UI, "
+                         "bench -> https://localhost:PORT/bench.html; frames recorded with episodes")
+    ap.add_argument("--cam-size", default="%dx%d" % config.CAMERA_SIZE, help="WxH")
     ap.add_argument("--scale", type=float, default=config.PHONE_SCALE, help="phone->arm travel")
     ap.add_argument("--azimuth", type=float, default=0.0,
                     help="deg; direction 'phone forward' maps to in the base frame (0 = arm +x)")
     ap.add_argument("--max-speed", type=float, default=config.MAX_JOINT_SPEED_DPS, help="deg/s per joint")
+    ap.add_argument("--frame-size", default="%dx%d" % config.FRAME_SIZE,
+                    help="WxH of stored episode frames (cameras may capture larger)")
+    ap.add_argument("--auto-tasks", nargs="?", const="hf", choices=("hf", "mock"), default=None,
+                    help="VLM proposes each task + SAM masks (needs --cameras); 'mock' = offline stand-ins")
+    ap.add_argument("--no-overlay", action="store_true", help="disable the live highlighted bench view")
+    ap.add_argument("--track-backend", choices=("coreml", "pytorch"), default="coreml",
+                    help="EdgeTAM backend for the live bench highlight (coreml = Apple GPU)")
+    ap.add_argument("--task-json", default=None,
+                    help='manual task block, e.g. \'{"verb":"pick","target":"green boat",'
+                         '"destination":"bin","scene_id":"s1","variant_tags":["joint"]}\'')
     ap.add_argument("--task", default="pick up the object and place it in the bin")
     ap.add_argument("--data-dir", default=str(config.ROOT / "data"))
     ap.add_argument("--session", default=None, help="session name (default timestamp; reuse to append)")
@@ -248,7 +314,16 @@ def main():
             from .backends.sim import SimBackend
             backend = SimBackend(viewer=not args.no_viewer)
             twin = None
-        run_loop(args, backend, server, twin)
+        cams = None
+        if args.cameras:
+            from .cameras import CameraSet
+            w, h = (int(v) for v in args.cam_size.lower().split("x"))
+            cams = CameraSet(width=w, height=h).start(on_frame=server.push_frame)
+        try:
+            run_loop(args, backend, server, twin, cams=cams)
+        finally:
+            if cams is not None:
+                cams.stop()
     except KeyboardInterrupt:
         print("\nbye")
 

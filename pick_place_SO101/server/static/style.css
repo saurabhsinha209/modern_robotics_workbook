@@ -30,7 +30,7 @@ h1 { margin: 0 0 4px; font-size: 20px; }
 #instr:disabled { opacity:.7; }
 #xrStats { color:var(--mut); font-size:11px; }
 
-#cams { flex:1; min-height:0; display:grid; grid-template-columns: 1.6fr 1fr; gap:8px; }
+#cams { flex:1; min-height:0; display:grid; grid-template-columns: 1fr; gap:8px; }
 .cam { position:relative; background:#0b0e13; border:1px solid #232a36; border-radius:10px; overflow:hidden; }
 .cam img { width:100%; height:100%; object-fit:cover; display:none; }
 .cam.live img { display:block; }
@@ -70,3 +70,7 @@ button { font: inherit; color:var(--fg); border:0; border-radius:12px; touch-act
 @keyframes nosig { to { opacity: 0.55; } }
 
 .home { font-size:13px; font-weight:800; line-height:1.15; background:#1d4ed8; color:#fff; }
+
+#taskrow { display:flex; gap:6px; margin-top:6px; }
+#taskrow input { flex:1; min-width:0; padding:8px 10px; border-radius:8px; border:1px solid #2a3140;
+  background:#10141b; color:var(--fg); font-size:14px; }

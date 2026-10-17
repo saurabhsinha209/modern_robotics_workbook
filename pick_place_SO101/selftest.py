@@ -303,6 +303,62 @@ def run_selftest():
     results.append(_check("labels", (m0["outcome"], m1["outcome"]) == ("success", "failure"),
                           f"{m0['n_steps']} / {m1['n_steps']} steps"))
 
+    # 8b ── task block, masks, downsized frames
+    print("8b. task block / masks / frame downsizing")
+    import cv2
+    tmp3 = pathlib.Path(tempfile.mkdtemp(prefix="so101_task_"))
+    lg = EpisodeLogger(tmp3, session="k", hz=HZ, frame_size=(320, 240), full_every=5)
+    big = cv2.imencode(".jpg", np.full((720, 1280, 3), 90, np.uint8))[1].tobytes()
+    mk = np.zeros((720, 1280), np.uint8); mk[100:300, 200:600] = 1
+    lg.start("put the boat in the bin",
+             task={"verb": "put", "target": "boat", "destination": "bin", "scene_id": "s3",
+                   "planner": "llm", "variant_tags": ["joint"]},
+             masks={"target": mk, "dest": mk})
+    rr2 = Runner(); rr2.phone.clutch = True
+    for i in range(12):
+        rr2.t += DT
+        msg = rr2.phone.msg(rr2.t)
+        qc, info = rr2.pipe.step(msg, rr2.sim.read(), now=rr2.t)
+        lg.step(rr2.sim.read(), qc, info, msg, frames={"wrist": big, "bench": big})
+    mt = lg.end("success")
+    e0 = tmp3 / "k" / "ep_0000"
+    results.append(_check("meta.task block", mt["task"]["target"] == "boat" and mt["task"]["planner"] == "llm"
+                          and mt["task"]["instruction"] == "put the boat in the bin"
+                          and json.loads((e0 / "meta.json").read_text())["task"]["scene_id"] == "s3"))
+    idx3 = json.loads((tmp3 / "k" / "episodes.jsonl").read_text().splitlines()[0])
+    results.append(_check("task in episodes.jsonl", idx3["task"]["destination"] == "bin"))
+    fr = cv2.imread(str(e0 / "frames" / "wrist" / "000003.jpg"))
+    results.append(_check("frames downsized to 320x240", fr is not None and fr.shape[:2] == (240, 320)
+                          and len(list((e0 / "frames" / "bench").glob("*.jpg"))) == 12))
+    results.append(_check("full-size frame every 5 steps",
+                          sorted(p.name for p in (e0 / "frames_full" / "wrist").glob("*.jpg"))
+                          == ["000000.jpg", "000005.jpg", "000010.jpg"]))
+    tm = cv2.imread(str(e0 / "masks" / "target.png"), cv2.IMREAD_UNCHANGED)
+    results.append(_check("mask stored uint8 0/255 at frame size",
+                          tm.shape == (240, 320) and set(np.unique(tm)) == {0, 255}))
+    t0 = time.perf_counter()
+    lg2 = EpisodeLogger(tmp3, session="k2", hz=HZ); lg2.start("x")
+    for i in range(30):
+        lg2.step(rr2.sim.read(), qc, info, msg, frames={"wrist": big, "bench": big})
+    enq = (time.perf_counter() - t0) / 30
+    lg2.end("success")
+    results.append(_check("frame logging does not block the loop", enq < 0.005, f"{enq*1000:.2f} ms/step enqueue"))
+
+    # 8c ── --task-json / UI target+destination reach the logger
+    args3 = parse_args(["--backend", "sim", "--no-viewer", "--hz", str(HZ), "--data-dir", str(tmp3),
+                        "--session", "j", "--task-json",
+                        '{"instruction":"open the drawer","verb":"open","target":"drawer","scene_id":"a"}'])
+    sched3 = {3: ("start", {"destination": "none"}), 20: ("success", {})}
+    class Srv3(Srv):
+        def take_events(self):
+            ev = sched3.get(self.tick)
+            return [ev] if ev else []
+    run_loop(args3, SimBackend(viewer=False), Srv3(), max_ticks=30)
+    mj = json.loads((tmp3 / "j" / "ep_0000" / "meta.json").read_text())
+    results.append(_check("--task-json + UI fields merged",
+                          mj["task"]["verb"] == "open" and mj["task"]["target"] == "drawer"
+                          and mj["task"]["destination"] == "none" and mj["instruction"] == "open the drawer"))
+
     # 9 ── websocket server: phone messages in, events out, camera hook
     print("9. websocket server + camera hook")
     results.append(_check("server round trip", _server_roundtrip()))

@@ -87,3 +87,13 @@ def calibration_half_spans_deg(robot_id=ROBOT_ID):
         return None
     c = json.loads(f.read_text())
     return np.array([(c[j]["range_max"] - c[j]["range_min"]) / 2 * 360.0 / 4095.0 for j in ARM])
+
+# macOS camera Unique IDs (system_profiler SPCameraDataType). The UVC ID encodes the
+# USB port, so these follow the *ports*; swap cables and wrist/bench swap too.
+CAMERA_UIDS = {"wrist": "0x110000032e69221", "bench": "0x310000032e69221"}
+CAMERA_SIZE = (1280, 720)
+CAMERA_FPS = 30
+
+# Episode frames are stored downsized (training) + a full-size debug frame every N steps.
+FRAME_SIZE = (320, 240)
+FULL_FRAME_EVERY = 30

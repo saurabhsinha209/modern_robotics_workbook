@@ -30,11 +30,18 @@ function applyStatus(m) {
     recording = m.state === "recording";
     chip($("epchip"), recording ? `● REC ${m.ep_t.toFixed(0)}s · #${m.ep}` : `IDLE · next #${m.ep}`,
          recording ? "rec" : "idle");
-    $("instr").disabled = recording;
+    $("instr").disabled = $("tgt").disabled = $("dst").disabled = recording;
     $("startEp").disabled = recording;
     $("succBtn").disabled = !recording;
     $("failBtn").disabled = !recording;
     $("discardBtn").disabled = !recording;
+  }
+  if (m.auto !== undefined) {
+    $("nextBtn").style.display = ""; $("autochip").style.display = "";
+    const t = { planning: ["PLANNING…", "warn"], ready: [`${m.auto_target} → ${m.auto_dest}${m.auto_masks ? "" : " (no mask)"}`, "ok"],
+                failed: ["PLAN FAILED · manual", "bad"], idle: ["REARRANGE → NEXT TASK", "idle"] }[m.auto] || ["", "idle"];
+    chip($("autochip"), t[0], t[1]);
+    $("autochip").title = m.auto_err || "";
   }
   if (m.ik_ok !== undefined) {
     if (m.homing) chip($("ikchip"), "HOMING", "warn");
@@ -95,7 +102,8 @@ function wireControls() {
   tap("orientBtn", () => setOrient(!orientLock));
   tap("homeBtn", () => { setClutch(false); evt("home"); });
   tap("fwdBtn", () => evt("setforward"));
-  tap("startEp", () => { setClutch(false); evt("start", { instruction: $("instr").value.trim() }); });
+  tap("startEp", () => { setClutch(false); evt("start", { instruction: $("instr").value.trim(), target: $("tgt").value.trim(), destination: $("dst").value.trim() }); });
+  tap("nextBtn", () => evt("ready"));
   tap("succBtn", () => { setClutch(false); evt("success"); });
   tap("failBtn", () => { setClutch(false); evt("fail"); });
   tap("discardBtn", () => { setClutch(false); evt("discard"); });
@@ -103,7 +111,7 @@ function wireControls() {
   document.querySelectorAll(".preset").forEach(
     (p) => p.addEventListener("click", (e) => { e.stopPropagation(); setGripper(Number(p.dataset.v)); }));
   // stop slider / text taps from leaking into the XR "select" gesture
-  ["gripslider", "instr"].forEach((id) =>
+  ["gripslider", "instr", "tgt", "dst"].forEach((id) =>
     ["pointerdown", "touchstart"].forEach((t) => $(id).addEventListener(t, (e) => e.stopPropagation())));
   setGripper(gripper); setOrient(true);
   $("succBtn").disabled = $("failBtn").disabled = $("discardBtn").disabled = true;
@@ -114,7 +122,7 @@ async function startAR() {
     optionalFeatures: ["dom-overlay"], domOverlay: { root: $("overlay") },
   });
   $("overlay").style.display = "flex";
-  attachCam("wrist"); attachCam("bench");
+  attachCam("wrist");
 
   const glCanvas = document.createElement("canvas");
   const gl = glCanvas.getContext("webgl", { xrCompatible: true });

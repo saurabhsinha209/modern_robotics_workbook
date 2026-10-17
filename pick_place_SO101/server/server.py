@@ -26,7 +26,7 @@ from . import gen_cert
 
 HERE = pathlib.Path(__file__).resolve().parent
 STATIC = HERE / "static"
-CAMERAS = ("wrist", "bench")
+CAMERAS = ("wrist", "bench", "bench_hl")   # bench_hl = bench with the task-mask highlight (bench_overlay.py)
 
 
 class SharedState:
