@@ -17,7 +17,7 @@ import numpy as np
 from .highlight import apply_highlight
 
 
-class BenchOverlay:
+class _Overlay:
     def __init__(self, get_jpeg, publish, peek_masks=lambda: None, hz=15.0, out_hz=20.0, backend="coreml"):
         self.get_jpeg, self.publish, self.peek_masks = get_jpeg, publish, peek_masks
         self.hz, self.out_hz, self.backend = hz, out_hz, backend
@@ -98,3 +98,99 @@ class BenchOverlay:
             except Exception as e:                       # a bad frame must not kill the view
                 print(f"[overlay] {type(e).__name__}: {e}")
             time.sleep(max(0.0, period - (time.perf_counter() - t0)))
+
+
+# ---- out-of-process wrapper: keeps the tracker / JPEG work off the control loop's GIL -------------------
+def _worker(conn, hz, backend):
+    import os
+    os.nice(10)
+    st, lock = {"j": None, "t": 0, "m": None}, threading.Lock()
+    send_lock = threading.Lock()
+
+    def publish(name, jpeg):
+        with send_lock:
+            conn.send(jpeg)
+    ov = _Overlay(lambda: (st["j"], st["t"]), publish, lambda: st["m"], hz=hz, backend=backend).start()
+    while True:
+        msg = conn.recv()
+        if msg[0] == "frame":
+            st["j"], st["t"] = msg[1], msg[2]
+        elif msg[0] == "masks":
+            st["m"] = msg[1]
+        elif msg[0] == "untrack":
+            st["m"] = None
+            ov.untrack()
+        elif msg[0] == "stop":
+            ov.stop()
+            return
+
+
+class BenchOverlay:
+    """Same API as _Overlay, but runs in a child process (start/track/untrack/stop)."""
+    def __init__(self, get_jpeg, publish, peek_masks=lambda: None, hz=15.0, out_hz=20.0, backend="coreml"):
+        self.get_jpeg, self.publish, self.peek_masks = get_jpeg, publish, peek_masks
+        self.hz, self.out_hz, self.backend = hz, out_hz, backend
+        self._sent, self._stop, self._slock = None, threading.Event(), threading.Lock()
+
+    def start(self):
+        import multiprocessing as mp
+        ctx = mp.get_context("spawn")
+        self._conn, child = ctx.Pipe()
+        self._proc = ctx.Process(target=_worker, args=(child, self.hz, self.backend), daemon=True)
+        self._proc.start()
+        self._threads = [threading.Thread(target=self._feed, daemon=True),
+                         threading.Thread(target=self._drain, daemon=True)]
+        for t in self._threads:
+            t.start()
+        return self
+
+    def _send(self, msg):
+        with self._slock:
+            self._conn.send(msg)
+
+    def _feed(self):
+        last, period = None, 1.0 / self.out_hz
+        while not self._stop.is_set():
+            try:
+                pm = self.peek_masks()
+                if pm is not None and pm is not self._sent:
+                    self.track(pm)
+                j, t = self.get_jpeg()
+                if j is not None and t != last:
+                    last = t
+                    self._send(("frame", j, t))
+            except (BrokenPipeError, OSError):
+                return
+            time.sleep(period / 2)
+
+    def _drain(self):
+        while not self._stop.is_set():
+            try:
+                if self._conn.poll(0.1):
+                    self.publish("bench_hl", self._conn.recv())
+            except (EOFError, OSError):
+                return
+
+    def track(self, masks):
+        if masks is None or masks is self._sent:
+            return
+        self._sent = masks
+        self._send(("masks", masks))
+
+    def untrack(self):
+        self._sent = None
+        try:
+            self._send(("untrack",))
+        except OSError:
+            pass
+
+    def stop(self):
+        try:
+            self._send(("stop",))
+        except OSError:
+            pass
+        self._proc.join(timeout=5)             # keep draining meanwhile: a full pipe would block the child
+        if self._proc.is_alive():
+            self._proc.terminate()
+            self._proc.join(timeout=2)
+        self._stop.set()
