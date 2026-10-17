@@ -168,7 +168,7 @@ head needs. Don't treat `terminal` as the exact success instant.
 ## Live highlighted bench view
 
 `run_teleop --cameras --auto-tasks` also serves `https://<mac>:8443/bench.html` (`/cam/bench_hl.mjpg`): raw bench
-frames when idle, the planner's masks once a task is proposed, and during a recording Core ML EdgeTAM (Apple GPU,
+frames when idle, then as soon as a task is planned Core ML EdgeTAM (Apple GPU,
 ~13 Hz for two objects, `bench_overlay.py` + `coreml_live_tracker.py`) following the target and destination.
 Recorded frames stay raw. `--no-overlay` turns it off, `--track-backend pytorch` uses the slower MPS tracker.
 Weights live in `models/EdgeTAM-CoreML-Video/` (gitignored). Standalone demo: `python -m pick_place_SO101.tools.live_track

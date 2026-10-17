@@ -1,8 +1,8 @@
 """Live highlighted bench feed for the teleop UI (served as /cam/bench_hl.mjpg, bench.html).
 
     idle                -> raw bench frames
-    proposal ready      -> the planner's frame-0 masks, static (what the episode will be seeded with)
-    episode recording   -> Core ML EdgeTAM (GPU) follows target + destination at `hz`
+    proposal ready /    -> Core ML EdgeTAM (GPU) follows target + destination at `hz`; the planner's frame-0
+    episode recording      masks are shown until the tracker has loaded
 
 The recorded frames stay raw (episodes log cams.jpeg("bench")); this is a view for the operator, and it
 previews exactly what convert_lerobot --highlight sam will produce. Failure to load the tracker degrades
@@ -22,7 +22,7 @@ class BenchOverlay:
         self.get_jpeg, self.publish, self.peek_masks = get_jpeg, publish, peek_masks
         self.hz, self.out_hz, self.backend = hz, out_hz, backend
         self._tracker, self._lock, self._stop, self._t = None, threading.Lock(), threading.Event(), None
-        self._last = None
+        self._last, self._seeded = None, None
 
     def _frame(self):
         j, t = self.get_jpeg()
@@ -43,8 +43,11 @@ class BenchOverlay:
             self._t.join(timeout=5)
 
     def track(self, masks):
-        """Begin following the masks (call at episode START)."""
+        """Begin following the masks. A no-op if these exact masks are already being tracked."""
+        if masks is not None and masks is self._seeded and self._tracker is not None:
+            return
         self.untrack()
+        self._seeded = masks
         seeds = {k: v for k, v in (masks or {}).items() if v is not None and np.asarray(v).any()}
         if not seeds:
             return
@@ -61,6 +64,7 @@ class BenchOverlay:
             self._tracker = tr
 
     def untrack(self):
+        self._seeded = None
         with self._lock:
             tr, self._tracker = self._tracker, None
         if tr is not None:
@@ -75,12 +79,15 @@ class BenchOverlay:
         while not self._stop.is_set():
             t0 = time.perf_counter()
             try:
+                pm = self.peek_masks()
+                if pm is not None and pm is not self._seeded:
+                    self.track(pm)                    # plan ready -> start following it now
                 j, bgr = self._frame()
                 if j is not None:
                     with self._lock:
                         tr = self._tracker
                     m = tr.masks() if tr is not None and tr.stats()["state"] == "tracking" \
-                        else (self.peek_masks() if tr is None else None)
+                        else self._seeded
                     if m and any(v is not None for v in m.values()):
                         rgb = apply_highlight(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), m.get("target"), m.get("dest"))
                         ok, enc = cv2.imencode(".jpg", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR),
